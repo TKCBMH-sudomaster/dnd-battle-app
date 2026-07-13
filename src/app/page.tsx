@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -10,29 +11,30 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMessage('');
 
-    // MASTER ENGINE ACCESS CREDENTIALS
-    const MASTER_USERNAME = 'trevor.mhunter@yahoo.com';
-    const MASTER_PASSWORD = 'Kids@CBMN2470!!!'; 
-
-    // Normalize inputs to prevent tiny casing or spacing mismatches
-    const inputUser = username.trim().toLowerCase();
+    const inputEmail = username.trim().toLowerCase();
     const inputPass = password.trim();
 
-    if (inputUser === MASTER_USERNAME.toLowerCase() && inputPass === MASTER_PASSWORD) {
-      router.push('/encounter-setup');
-    } else {
+    const { error } = await supabase.auth.signInWithPassword({
+      email: inputEmail,
+      password: inputPass,
+    });
+
+    if (error) {
       setErrorMessage('ACCESS DENIED: Invalid Operator Credentials or Security Pass Key.');
       setLoading(false);
+      return;
     }
+
+    router.push('/encounter-setup');
   };
 
   return (
-    <main className="relative min-h-screen w-full flex items-center justify-center p-4 overflow-hidden bg-stone-950">
+    <main className="relative h-screen w-screen flex items-center justify-center p-4 overflow-hidden bg-stone-950">
       
       {/* FULLSCREEN BACKGROUND VIDEO LAYER */}
       <video
@@ -55,9 +57,11 @@ export default function LoginPage() {
       <div className="w-full max-w-md p-6 md:p-8 z-20 space-y-6">
         
         <div className="text-center space-y-1.5">
-          <h1 className="text-2xl font-serif font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-b from-amber-300 to-amber-500 uppercase">
-            DND BATTLE HUB
-          </h1>
+          <img
+            src="/dmd-logo.png"
+            alt="DMD Logo"
+            className="mx-auto h-36 md:h-44 w-auto object-contain drop-shadow-lg"
+          />
           <p className="text-[10px] font-mono text-stone-500 uppercase tracking-widest">
             DM ENGINE SYSTEM ACCESS v2.0
           </p>
@@ -106,12 +110,6 @@ export default function LoginPage() {
             {loading ? 'VERIFYING SYSTEM KEY CODES...' : 'AUTHORIZE ACCESS KEY'}
           </button>
         </form>
-
-        <div className="text-center pt-2 border-t border-stone-800/60">
-          <span className="text-[9px] font-mono text-stone-600 uppercase tracking-widest">
-            SECURE RESTRICTED INFRASTRUCTURE
-          </span>
-        </div>
 
       </div>
     </main>

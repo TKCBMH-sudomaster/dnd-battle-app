@@ -14,7 +14,6 @@ interface Combatant {
   status_condition?: string | null;
 }
 
-// Per-condition banner/particle color theme
 const CONDITION_THEME: Record<string, { text: string; glow: string; flash: string; particle: string }> = {
   concentrating: { text: 'text-cyan-300', glow: 'rgba(34,211,238,0.9)', flash: 'rgba(34,211,238,0.25)', particle: '#22d3ee' },
   blessed: { text: 'text-amber-300', glow: 'rgba(251,191,36,0.9)', flash: 'rgba(251,191,36,0.25)', particle: '#fbbf24' },
@@ -42,7 +41,6 @@ const CONDITION_THEME: Record<string, { text: string; glow: string; flash: strin
   prone: { text: 'text-stone-300', glow: 'rgba(214,211,209,0.7)', flash: 'rgba(214,211,209,0.18)', particle: '#d6d3d1' },
 };
 
-// Which of the 4 base animation "feels" each condition uses by default (only applies when NO video is mapped)
 const CONDITION_GROUP: Record<string, 'buff' | 'toxic' | 'violent' | 'locked'> = {
   concentrating: 'buff',
   blessed: 'buff',
@@ -77,14 +75,10 @@ const GROUP_STYLE: Record<'buff' | 'toxic' | 'violent' | 'locked', { animClass: 
   locked: { animClass: 'animate-stunned-static contrast-150', borderGlow: 'border-sky-400/80 shadow-[0_0_65px_rgba(56,189,248,0.6)]' },
 };
 
-// Per-condition animation overrides — takes priority over the group default above.
-// frightened is the ONLY condition that gets a shake/tremble animation on the frame.
 const CONDITION_STYLE_OVERRIDE: Partial<Record<string, { animClass: string; borderGlow: string }>> = {
   frightened: { animClass: 'animate-frightened-tremble', borderGlow: 'border-fuchsia-400/85 shadow-[0_0_65px_rgba(232,121,249,0.6)]' },
 };
 
-// Condition -> video filename in public/effects/. Only conditions listed here get a video overlay;
-// everything else falls back to the CSS group animation + ambient particles.
 const CONDITION_VIDEO_MAP: Record<string, string> = {
   blessed: 'blessed.mp4',
   burning: 'fire.mp4',
@@ -93,6 +87,7 @@ const CONDITION_VIDEO_MAP: Record<string, string> = {
   confused: 'confused.mp4',
   possessed: 'possessed.mp4',
   shocked: 'shocked.mp4',
+  stunned: 'stunned.mp4',
 };
 
 const AMBIENT_PARTICLES = Array.from({ length: 14 }).map((_, i) => ({
@@ -105,9 +100,12 @@ export default function PlayerMonitor() {
   const [queue, setQueue] = useState<Combatant[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusBanner, setStatusBanner] = useState<{ name: string; label: string; key: number } | null>(null);
+  const [healPulse, setHealPulse] = useState<{ key: number } | null>(null);
 
   const prevStatusRef = useRef<Record<number, string | null>>({});
+  const prevHpRef = useRef<Record<number, number>>({});
   const bannerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const healTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bloodVideoRef = useRef<HTMLVideoElement | null>(null);
   const statusVideoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -117,7 +115,7 @@ export default function PlayerMonitor() {
         .schema('dnd')
         .from('encounter_queue')
         .select('*')
-        .order('turn_order', { ascending: true });
+        .order('initiative', { ascending: false });
 
       const newQueue = data || [];
 
@@ -133,9 +131,24 @@ export default function PlayerMonitor() {
         }
       }
 
+      const activeCombatant = newQueue.find(c => c.is_active);
+      if (activeCombatant) {
+        const prevHp = prevHpRef.current[activeCombatant.id];
+        if (prevHp !== undefined && activeCombatant.hp_current > prevHp) {
+          if (healTimeoutRef.current) clearTimeout(healTimeoutRef.current);
+          setHealPulse({ key: Date.now() });
+          healTimeoutRef.current = setTimeout(() => setHealPulse(null), 1700);
+        }
+      }
+
       const nextStatusMap: Record<number, string | null> = {};
-      newQueue.forEach(c => { nextStatusMap[c.id] = c.status_condition ?? null; });
+      const nextHpMap: Record<number, number> = {};
+      newQueue.forEach(c => {
+        nextStatusMap[c.id] = c.status_condition ?? null;
+        nextHpMap[c.id] = c.hp_current;
+      });
       prevStatusRef.current = nextStatusMap;
+      prevHpRef.current = nextHpMap;
 
       setQueue(newQueue);
       setLoading(false);
@@ -153,10 +166,10 @@ export default function PlayerMonitor() {
     return () => {
       supabase.removeChannel(channel);
       if (bannerTimeoutRef.current) clearTimeout(bannerTimeoutRef.current);
+      if (healTimeoutRef.current) clearTimeout(healTimeoutRef.current);
     };
   }, []);
 
-  // Force the blood video to actually play (muted set via ref, not just JSX attribute)
   useEffect(() => {
     const vid = bloodVideoRef.current;
     if (!vid) return;
@@ -175,7 +188,6 @@ export default function PlayerMonitor() {
   const activeStatusKey = currentTurn?.status_condition?.toLowerCase() || null;
   const activeStatusVideoFile = activeStatusKey ? CONDITION_VIDEO_MAP[activeStatusKey] : null;
 
-  // Force the status-condition video to (re)play whenever the active condition/video changes
   useEffect(() => {
     const vid = statusVideoRef.current;
     if (!vid || !activeStatusVideoFile) return;
@@ -208,8 +220,6 @@ export default function PlayerMonitor() {
     return upcoming;
   })();
 
-  // Grayscale/sepia HP tinting removed — image stays untouched at all HP levels.
-  // Damage is now communicated purely by the blood-splatter video intensity + heartbeat glow at critical HP.
   const getHealthEffects = (current: number, max: number) => {
     if (current <= 0) {
       return {
@@ -266,8 +276,6 @@ export default function PlayerMonitor() {
     const group = CONDITION_GROUP[key];
     const groupStyle = group ? GROUP_STYLE[group] : { animClass: '', borderGlow: 'border-stone-800' };
 
-    // If this condition has a real video overlay, suppress the CSS shake/pulse animation on the frame —
-    // only keep the border glow. Only 'frightened' (handled above via override) should shake.
     if (hasVideo) {
       return { animClass: '', borderGlow: groupStyle.borderGlow, theme };
     }
@@ -316,6 +324,16 @@ export default function PlayerMonitor() {
           45% { box-shadow: 0 0 90px rgba(220,38,38,0.75), inset 0 0 100px rgba(220,38,38,0.4); }
           60%, 100% { box-shadow: 0 0 40px rgba(220,38,38,0.35), inset 0 0 60px rgba(220,38,38,0.15); }
         }
+        @keyframes healPulseGlow {
+          0% { box-shadow: 0 0 0px rgba(34,197,94,0); }
+          25% { box-shadow: 0 0 90px rgba(34,197,94,0.85), inset 0 0 70px rgba(34,197,94,0.35); }
+          100% { box-shadow: 0 0 0px rgba(34,197,94,0); }
+        }
+        @keyframes healRadialBurst {
+          0% { opacity: 0; transform: scale(0.6); }
+          25% { opacity: 0.75; }
+          100% { opacity: 0; transform: scale(1.35); }
+        }
         @keyframes ambientFloat {
           0% { transform: translateY(0) scale(1); opacity: 0; }
           15% { opacity: 0.9; }
@@ -354,13 +372,14 @@ export default function PlayerMonitor() {
         .animate-stunned-static { animation: stunnedStatic 2.6s ease-in-out infinite !important; }
         .animate-blessed-float { animation: blessedFloat 3.2s ease-in-out infinite !important; }
         .animate-heartbeat { animation: heartbeatGlow 1.1s ease-in-out infinite !important; }
+        .animate-heal-pulse { animation: healPulseGlow 1.6s ease-out forwards !important; }
+        .animate-heal-radial { animation: healRadialBurst 1.6s ease-out forwards; }
         .animate-banner-slam { animation: bannerSlamIn 2.8s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
         .animate-screen-flash { animation: screenFlash 0.5s ease-out forwards; }
         .animate-crack-in { animation: crackFadeIn 0.4s ease-out forwards; }
         .glitch-echo { animation: glitchShift 1.6s steps(2) infinite; }
       `}</style>
 
-      {/* STATUS EFFECT ANNOUNCEMENT — full screen flash + burst rays + banner */}
       {statusBanner && (() => {
         const theme = CONDITION_THEME[statusBanner.label.toLowerCase()];
         const rays = Array.from({ length: 12 }).map((_, i) => i * 30);
@@ -435,14 +454,15 @@ export default function PlayerMonitor() {
                 const style = getStatusStyle(currentTurn.status_condition, !!activeStatusVideoFile);
 
                 return (
-                  <div className={`w-full h-full bg-stone-900 border rounded-3xl overflow-hidden shadow-[0_0_60px_rgba(0,0,0,0.8)] relative transition-all duration-500 ${style.borderGlow} ${style.animClass} ${fx.heartbeat ? 'animate-heartbeat' : ''}`}>
+                  <div className={`w-full h-full bg-stone-900 border rounded-3xl overflow-hidden shadow-[0_0_60px_rgba(0,0,0,0.8)] relative transition-all duration-500 ${style.borderGlow} ${style.animClass} ${fx.heartbeat ? 'animate-heartbeat' : ''} ${healPulse ? 'animate-heal-pulse' : ''}`}>
 
-                    {/* LAYER 0: base portrait image — no HP-based filters applied anymore */}
+                    {/* Base portrait — object-contain shows the entire image (letterboxed if needed)
+                        instead of cropping in with object-cover */}
                     {currentTurn.image_url ? (
                       <img
                         src={currentTurn.image_url}
                         alt={currentTurn.name}
-                        className="absolute inset-0 w-full h-full object-cover z-0"
+                        className="absolute inset-0 w-full h-full object-contain z-0"
                       />
                     ) : (
                       <div className="absolute inset-0 z-0 flex flex-col items-center justify-center bg-stone-900 text-stone-700">
@@ -450,7 +470,17 @@ export default function PlayerMonitor() {
                       </div>
                     )}
 
-                    {/* LAYER 10: blood-splatter video overlay — intensity scales with damage */}
+                    {healPulse && (
+                      <div
+                        key={healPulse.key}
+                        className="absolute inset-0 z-[5] pointer-events-none animate-heal-radial"
+                        style={{
+                          background: 'radial-gradient(circle, rgba(34,197,94,0.9) 0%, rgba(34,197,94,0.25) 45%, transparent 75%)',
+                          mixBlendMode: 'screen',
+                        }}
+                      />
+                    )}
+
                     <video
                       ref={bloodVideoRef}
                       src="/effects/blood-splatter.mp4"
@@ -464,7 +494,6 @@ export default function PlayerMonitor() {
                       style={{ opacity: fx.splatterOpacity }}
                     />
 
-                    {/* LAYER 15: condition-specific video overlay — only renders if this status has a mapped video */}
                     {activeStatusVideoFile && currentTurn.hp_current > 0 && (
                       <video
                         key={activeStatusVideoFile}
@@ -480,7 +509,6 @@ export default function PlayerMonitor() {
                       />
                     )}
 
-                    {/* LAYER 20: status ambient particles — only shown for conditions WITHOUT a dedicated video */}
                     {style.theme && !activeStatusVideoFile && currentTurn.hp_current > 0 && (
                       <div className="absolute inset-0 z-20 pointer-events-none overflow-hidden">
                         {AMBIENT_PARTICLES.map((p, i) => (
@@ -501,10 +529,8 @@ export default function PlayerMonitor() {
                       </div>
                     )}
 
-                    {/* LAYER 20: vignette gradient */}
                     <div className="absolute inset-0 z-20 bg-gradient-to-t from-black/60 via-transparent to-black/20 pointer-events-none" />
 
-                    {/* LAYER 30: screen crack overlay at 0 HP */}
                     {fx.showCrack && (
                       <svg className="absolute inset-0 z-30 w-full h-full pointer-events-none animate-crack-in" viewBox="0 0 400 400" preserveAspectRatio="none">
                         <g stroke="rgba(255,255,255,0.55)" strokeWidth="1.4" fill="none">
@@ -514,7 +540,6 @@ export default function PlayerMonitor() {
                       </svg>
                     )}
 
-                    {/* LAYER 40: defeated banner */}
                     {fx.showDefeated && (
                       <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/75 backdrop-blur-[3px]">
                         <span className="text-red-600/80 font-serif font-black text-5xl md:text-7xl tracking-widest uppercase border-[6px] border-red-700/50 px-10 py-3 rounded-2xl rotate-[-12deg] animate-pulse"
@@ -529,7 +554,6 @@ export default function PlayerMonitor() {
             </div>
           </div>
 
-          {/* TIMELINE RUNNER PANEL */}
           <div className="w-[30%] h-full bg-stone-900/30 border border-stone-900 p-4 rounded-3xl flex flex-col justify-between overflow-hidden">
             <div className="border-b border-stone-800 pb-3 mb-4 flex-shrink-0">
               <span className="text-[10px] font-mono font-black text-stone-500 uppercase tracking-[0.2em] block">

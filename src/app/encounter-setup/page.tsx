@@ -13,6 +13,9 @@ interface BaseAsset {
   ac: number;
   initiative_bonus: number;
   image_url?: string | null;
+  description?: string | null;
+  traits?: string | null;
+  actions?: string | null;
 }
 
 interface ActiveQueueItem {
@@ -25,6 +28,10 @@ interface ActiveQueueItem {
   initiative: number;
   initiative_bonus: number;
   image_url: string | null;
+  description?: string | null;
+  creature_type?: string | null;
+  traits?: string | null;
+  actions?: string | null;
 }
 
 export default function EncounterSetup() {
@@ -38,10 +45,21 @@ export default function EncounterSetup() {
   const [creationTab, setCreationTab] = useState<'player' | 'creature'>('player');
   const [formName, setFormName] = useState('');
   const [formClass, setFormClass] = useState('');
-  const [formHp, setFormHp] = useState(10);
-  const [formAc, setFormAc] = useState(10);
-  const [formInitBonus, setFormInitBonus] = useState(0);
+  const [formHp, setFormHp] = useState<number | ''>('');
+  const [formAc, setFormAc] = useState<number | ''>('');
+  const [formInitBonus, setFormInitBonus] = useState<number | ''>('');
   const [formImageUrl, setFormImageUrl] = useState('');
+  const [formNotes, setFormNotes] = useState('');
+
+  const handleNumberChange = (setter: (v: number | '') => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    if (val === '') {
+      setter('');
+      return;
+    }
+    const parsed = parseInt(val, 10);
+    if (!isNaN(parsed)) setter(parsed);
+  };
 
   useEffect(() => {
     const fetchCoreRepositories = async () => {
@@ -78,6 +96,8 @@ export default function EncounterSetup() {
     router.push('/creator-factory');
   };
 
+  // Copies asset info into a fresh staging entry. item.name is a local copy from this point on —
+  // editing it (e.g. to add a nickname) never touches the source players/monsters table row.
   const addAssetToStagingQueue = (asset: BaseAsset, type: 'player' | 'creature') => {
     const newItem: ActiveQueueItem = {
       source_id: asset.id,
@@ -89,6 +109,10 @@ export default function EncounterSetup() {
       initiative_bonus: asset.initiative_bonus,
       initiative: asset.initiative_bonus + Math.floor(Math.random() * 20) + 1,
       image_url: asset.image_url || null,
+      description: asset.description || null,
+      creature_type: asset.creature_type || null,
+      traits: asset.traits || null,
+      actions: asset.actions || null,
     };
 
     setActiveQueue(prev => [...prev, newItem]);
@@ -101,28 +125,43 @@ export default function EncounterSetup() {
     const newItem: ActiveQueueItem = {
       name: formName.trim(),
       type: creationTab,
-      hp_max: Number(formHp),
-      hp_current: Number(formHp),
-      ac: Number(formAc),
-      initiative_bonus: Number(formInitBonus),
-      initiative: Number(formInitBonus) + Math.floor(Math.random() * 20) + 1,
+      hp_max: Number(formHp) || 1,
+      hp_current: Number(formHp) || 1,
+      ac: Number(formAc) || 0,
+      initiative_bonus: Number(formInitBonus) || 0,
+      initiative: (Number(formInitBonus) || 0) + Math.floor(Math.random() * 20) + 1,
       image_url: formImageUrl.trim() || null,
+      description: formNotes.trim() || null,
+      creature_type: null,
+      traits: null,
+      actions: null,
     };
 
     setActiveQueue(prev => [...prev, newItem]);
 
     setFormName('');
     setFormClass('');
-    setFormHp(10);
-    setFormAc(10);
-    setFormInitBonus(0);
+    setFormHp('');
+    setFormAc('');
+    setFormInitBonus('');
     setFormImageUrl('');
+    setFormNotes('');
   };
 
   const updateStagingRoll = (index: number, val: number) => {
     setActiveQueue(prev => {
       const updated = [...prev];
       updated[index].initiative = val;
+      return updated;
+    });
+  };
+
+  // Renames a single staged entry only — this is purely local state until deployment,
+  // and is never written back to the players/monsters compendium tables.
+  const updateStagingName = (index: number, val: string) => {
+    setActiveQueue(prev => {
+      const updated = [...prev];
+      updated[index].name = val;
       return updated;
     });
   };
@@ -153,6 +192,10 @@ export default function EncounterSetup() {
         is_player: item.type === 'player',
         monster_reference_id: item.type === 'creature' ? (item.source_id ?? null) : null,
         status_condition: null,
+        description: item.description ?? null,
+        creature_type: item.creature_type ?? null,
+        traits: item.traits ?? null,
+        actions: item.actions ?? null,
       })));
 
     if (!error) {
@@ -204,7 +247,6 @@ export default function EncounterSetup() {
 
           <div className="lg:col-span-4 space-y-6">
 
-            {/* REGISTERED PARTY ASSETS */}
             <div className="bg-stone-900/20 border border-stone-900 p-4 rounded-2xl space-y-3">
               <span className="text-[10px] font-mono font-black text-amber-500/70 tracking-widest block uppercase">
                 Active Player Roster Repository
@@ -252,7 +294,6 @@ export default function EncounterSetup() {
               </div>
             </div>
 
-            {/* REGISTERED BESTIARY CREATURE ASSETS */}
             <div className="bg-stone-900/20 border border-stone-900 p-4 rounded-2xl space-y-3">
               <span className="text-[10px] font-mono font-black text-stone-400 tracking-widest block uppercase">
                 Cataloged Bestiary Monster Logs
@@ -302,7 +343,6 @@ export default function EncounterSetup() {
 
           </div>
 
-          {/* COLUMN 2: ACTIVE ENCOUNTER STAGING TRACKER */}
           <div className="lg:col-span-5 bg-stone-900/40 border border-stone-900 p-4 rounded-2xl space-y-4">
             <div className="flex justify-between items-center border-b border-stone-900 pb-2">
               <span className="text-[10px] font-mono font-black text-stone-300 tracking-widest uppercase">
@@ -322,19 +362,30 @@ export default function EncounterSetup() {
               <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar">
                 {activeQueue.map((item, idx) => (
                   <div key={idx} className={`p-3 rounded-xl border flex items-center justify-between gap-3 bg-stone-950/40 ${item.type === 'player' ? 'border-amber-950/40' : 'border-stone-900'}`}>
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
                       {item.image_url ? (
-                        <img src={item.image_url} alt="" className="w-8 h-8 rounded-lg object-cover border border-stone-850" />
+                        <img src={item.image_url} alt="" className="w-8 h-8 rounded-lg object-cover border border-stone-850 flex-shrink-0" />
                       ) : (
-                        <div className="w-8 h-8 rounded-lg bg-stone-900 flex items-center justify-center text-[9px] font-mono text-stone-600">N/A</div>
+                        <div className="w-8 h-8 rounded-lg bg-stone-900 flex items-center justify-center text-[9px] font-mono text-stone-600 flex-shrink-0">N/A</div>
                       )}
-                      <div className="min-w-0">
-                        <h4 className="text-xs font-black uppercase tracking-wide truncate text-stone-200">{item.name}</h4>
-                        <p className="text-[9px] font-mono text-stone-500">MAX POOL: {item.hp_max}HP | AC: {item.ac}</p>
+                      <div className="min-w-0 flex-1">
+                        {/* Editable staging name — pre-filled with the compendium name, but freely
+                            editable here to disambiguate duplicates (e.g. "Cat" -> "Cat (near door)").
+                            This edit is local to this staging session only and is never saved back
+                            to the players/monsters tables. */}
+                        <input
+                          type="text"
+                          value={item.name}
+                          onChange={(e) => updateStagingName(idx, e.target.value)}
+                          onFocus={(e) => e.target.select()}
+                          placeholder="Encounter name..."
+                          className="w-full bg-transparent border-b border-transparent hover:border-stone-700 focus:border-amber-500 text-xs font-black uppercase tracking-wide text-stone-200 outline-none transition-colors py-0.5"
+                        />
+                        <p className="text-[9px] font-mono text-stone-500 mt-0.5">MAX POOL: {item.hp_max}HP | AC: {item.ac}</p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-shrink-0">
                       <div>
                         <label className="block text-[8px] font-mono text-stone-600 uppercase text-right">Init Turn</label>
                         <input
@@ -368,7 +419,6 @@ export default function EncounterSetup() {
             )}
           </div>
 
-          {/* COLUMN 3: QUICK INLINE TOKEN CREATOR */}
           <div className="lg:col-span-3 bg-stone-900/20 border border-stone-900 p-4 rounded-2xl space-y-4">
             <div className="flex border-b border-stone-900">
               <button
@@ -398,14 +448,20 @@ export default function EncounterSetup() {
                 <div>
                   <label className="block text-[9px] font-mono text-stone-500 uppercase tracking-wider mb-1">Max HP</label>
                   <input
-                    type="number" min="1" value={formHp} onChange={e => setFormHp(parseInt(e.target.value) || 1)}
+                    type="number"
+                    value={formHp}
+                    onChange={handleNumberChange(setFormHp)}
+                    placeholder="e.g. 10"
                     className="w-full bg-stone-950 border border-stone-850 px-2.5 py-1.5 text-xs font-mono rounded-lg text-stone-300 outline-none"
                   />
                 </div>
                 <div>
                   <label className="block text-[9px] font-mono text-stone-500 uppercase tracking-wider mb-1">Armor Class</label>
                   <input
-                    type="number" min="0" value={formAc} onChange={e => setFormAc(parseInt(e.target.value) || 0)}
+                    type="number"
+                    value={formAc}
+                    onChange={handleNumberChange(setFormAc)}
+                    placeholder="e.g. 10"
                     className="w-full bg-stone-950 border border-stone-850 px-2.5 py-1.5 text-xs font-mono rounded-lg text-stone-300 outline-none"
                   />
                 </div>
@@ -414,7 +470,10 @@ export default function EncounterSetup() {
               <div>
                 <label className="block text-[9px] font-mono text-stone-500 uppercase tracking-wider mb-1">Initiative Mod</label>
                 <input
-                  type="number" value={formInitBonus} onChange={e => setFormInitBonus(parseInt(e.target.value) || 0)}
+                  type="number"
+                  value={formInitBonus}
+                  onChange={handleNumberChange(setFormInitBonus)}
+                  placeholder="e.g. 0"
                   className="w-full bg-stone-950 border border-stone-850 px-2.5 py-1.5 text-xs font-mono rounded-lg text-stone-300 outline-none"
                 />
               </div>
@@ -424,6 +483,19 @@ export default function EncounterSetup() {
                 <input
                   type="text" value={formImageUrl} onChange={e => setFormImageUrl(e.target.value)} placeholder="https://image-link.png"
                   className="w-full bg-stone-950 border border-stone-850 px-2.5 py-1.5 text-xs rounded-lg text-stone-400 outline-none focus:border-stone-700 font-mono text-[10px]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[9px] font-mono text-stone-500 uppercase tracking-wider mb-1">
+                  DM Notes <span className="text-stone-600 normal-case">(shows on dashboard while acting)</span>
+                </label>
+                <textarea
+                  value={formNotes}
+                  onChange={e => setFormNotes(e.target.value)}
+                  rows={2}
+                  placeholder="e.g. Bites for 1d6, weak to fire..."
+                  className="w-full bg-stone-950 border border-stone-850 px-2.5 py-1.5 text-xs rounded-lg text-stone-300 outline-none focus:border-stone-700 font-sans resize-none"
                 />
               </div>
 

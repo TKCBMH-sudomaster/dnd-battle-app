@@ -12,28 +12,24 @@ export default function CreatorFactory() {
   const [statusMessage, setStatusMessage] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // CORE CONFIGS
   const [name, setName] = useState('');
   const [shortDesc, setShortDesc] = useState('');
-  const [hpMax, setHpMax] = useState(10);
-  const [ac, setAc] = useState(10);
-  const [initBonus, setInitBonus] = useState(0);
+  const [hpMax, setHpMax] = useState<number | ''>('');
+  const [ac, setAc] = useState<number | ''>('');
+  const [initBonus, setInitBonus] = useState<number | ''>('');
   const [imageUrl, setImageUrl] = useState('');
   
-  // META & TRAITS
   const [creatureType, setCreatureType] = useState('');
   const [alignment, setAlignment] = useState('');
   const [speed, setSpeed] = useState('');
   
-  // ABILITY SCORES
-  const [str, setStr] = useState(10);
-  const [dex, setDex] = useState(10);
-  const [con, setCon] = useState(10);
-  const [int, setUsingInt] = useState(10);
-  const [wis, setWis] = useState(10);
-  const [cha, setCha] = useState(10);
+  const [str, setStr] = useState<number | ''>('');
+  const [dex, setDex] = useState<number | ''>('');
+  const [con, setCon] = useState<number | ''>('');
+  const [int, setUsingInt] = useState<number | ''>('');
+  const [wis, setWis] = useState<number | ''>('');
+  const [cha, setCha] = useState<number | ''>('');
 
-  // DEFENSES & SENSES
   const [savingThrows, setSavingThrows] = useState('');
   const [skills, setSkills] = useState('');
   const [vulnerabilities, setVulnerabilities] = useState('');
@@ -42,13 +38,24 @@ export default function CreatorFactory() {
   const [senses, setSenses] = useState('');
   const [languages, setLanguages] = useState('');
 
-  // TEXT BLOCKS
   const [traits, setTraits] = useState('');
   const [actions, setActions] = useState('');
 
-  const getModifierValueString = (score: number) => {
-    const mod = Math.floor((score - 10) / 2);
+  const getModifierValueString = (score: number | '') => {
+    const numeric = typeof score === 'number' ? score : 10;
+    const mod = Math.floor((numeric - 10) / 2);
     return mod >= 0 ? `+${mod}` : `${mod}`;
+  };
+
+  // Field simply reflects whatever is typed, or stays empty — no default value ever gets forced back in.
+  const handleNumberChange = (setter: (v: number | '') => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    if (val === '') {
+      setter('');
+      return;
+    }
+    const parsed = parseInt(val, 10);
+    if (!isNaN(parsed)) setter(parsed);
   };
 
   useEffect(() => {
@@ -58,19 +65,19 @@ export default function CreatorFactory() {
       setEditingId(m.id);
       setName(m.name || '');
       setShortDesc(m.description || m.short_desc || m.short_description || '');
-      setHpMax(m.hp_max || m.max_hp || m.hp || 10);
-      setAc(m.ac || 10);
-      setInitBonus(m.initiative_bonus || m.init_bonus || m.initiative || 0);
+      setHpMax(m.hp_max ?? m.max_hp ?? m.hp ?? '');
+      setAc(m.ac ?? '');
+      setInitBonus(m.initiative_bonus ?? m.init_bonus ?? m.initiative ?? '');
       setImageUrl(m.image_url || '');
       setCreatureType(m.creature_type || '');
       setAlignment(m.alignment || '');
       setSpeed(m.speed || '');
-      setStr(m.str || 10);
-      setDex(m.dex || 10);
-      setCon(m.con || 10);
-      setUsingInt(m.int || 10);
-      setWis(m.wis || 10);
-      setCha(m.cha || 10);
+      setStr(m.str ?? '');
+      setDex(m.dex ?? '');
+      setCon(m.con ?? '');
+      setUsingInt(m.int ?? '');
+      setWis(m.wis ?? '');
+      setCha(m.cha ?? '');
       setSavingThrows(m.saving_throws || '');
       setSkills(m.skills || '');
       setVulnerabilities(m.vulnerabilities || '');
@@ -106,14 +113,19 @@ export default function CreatorFactory() {
     const payload = {
       name: name.trim(),
       description: shortDesc.trim(),
-      hp_max: hpMax,
-      ac: ac,
-      initiative_bonus: initBonus,
+      hp_max: Number(hpMax) || 1,
+      ac: Number(ac) || 0,
+      initiative_bonus: Number(initBonus) || 0,
       image_url: imageUrl.trim() || null,
       creature_type: creatureType,
       alignment,
       speed,
-      str, dex, con, int, wis, cha,
+      str: Number(str) || 10,
+      dex: Number(dex) || 10,
+      con: Number(con) || 10,
+      int: Number(int) || 10,
+      wis: Number(wis) || 10,
+      cha: Number(cha) || 10,
       saving_throws: savingThrows,
       skills,
       vulnerabilities,
@@ -140,7 +152,6 @@ export default function CreatorFactory() {
         router.push('/encounter-setup');
       }
     } catch (err: any) {
-      // Detailed debugging decomposition
       console.error("--- DATABASE TRANSACTION EXCEPTION ---");
       console.error("Raw Error Object:", err);
       console.error("Extracted Message:", err?.message || "No message attribute found");
@@ -148,7 +159,6 @@ export default function CreatorFactory() {
       console.error("Database Hint:", err?.hint || "None provided by engine");
       console.error("Detailed Context:", err?.details || "None provided by engine");
       
-      // Update the user interface message directly with the specific failure point
       const UI_Error_Msg = err?.message || JSON.stringify(err) || 'Unknown constraint violation';
       setStatusMessage(`DATABASE EXCEPTION: ${UI_Error_Msg}`);
     } finally {
@@ -173,7 +183,6 @@ export default function CreatorFactory() {
           </div>
         )}
 
-        {/* SECTION 1: IDENTITY & BASIC DISPOSITION */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="text-[10px] uppercase font-bold text-stone-400 font-mono block mb-1">Creature Name</label>
@@ -189,25 +198,23 @@ export default function CreatorFactory() {
           </div>
         </div>
 
-        {/* NARRATIVE SUMMARY */}
         <div>
           <label className="text-[10px] uppercase font-bold text-stone-400 font-mono block mb-1">Short Narrative Summary / Description</label>
           <input type="text" value={shortDesc} onChange={e => setShortDesc(e.target.value)} placeholder="e.g. A terrifying legendary beast clad in magma-forged scales who rules the molten crags." className="w-full bg-stone-950 border border-stone-800 rounded-xl p-3 text-sm text-white bg-transparent outline-none focus:border-amber-500" />
         </div>
 
-        {/* SECTION 2: COMBAT METRICS DECK */}
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-stone-950/40 p-4 rounded-xl border border-stone-800/80">
           <div>
             <label className="text-[10px] uppercase font-bold text-stone-400 font-mono block mb-1">Max HP</label>
-            <input type="number" required min={1} value={hpMax} onChange={e => setHpMax(parseInt(e.target.value) || 0)} className="w-full bg-stone-950 border border-stone-800 rounded-xl p-3 text-sm text-center text-white font-mono" />
+            <input type="number" required value={hpMax} onChange={handleNumberChange(setHpMax)} placeholder="e.g. 45" className="w-full bg-stone-950 border border-stone-800 rounded-xl p-3 text-sm text-center text-white font-mono" />
           </div>
           <div>
             <label className="text-[10px] uppercase font-bold text-stone-400 font-mono block mb-1">Armor Class</label>
-            <input type="number" required min={0} value={ac} onChange={e => setAc(parseInt(e.target.value) || 0)} className="w-full bg-stone-950 border border-stone-800 rounded-xl p-3 text-sm text-center text-white font-mono" />
+            <input type="number" required value={ac} onChange={handleNumberChange(setAc)} placeholder="e.g. 15" className="w-full bg-stone-950 border border-stone-800 rounded-xl p-3 text-sm text-center text-white font-mono" />
           </div>
           <div>
             <label className="text-[10px] uppercase font-bold text-stone-400 font-mono block mb-1">Init Modifier</label>
-            <input type="number" required value={initBonus} onChange={e => setInitBonus(parseInt(e.target.value) || 0)} className="w-full bg-stone-950 border border-stone-800 rounded-xl p-3 text-sm text-center text-white font-mono" />
+            <input type="number" required value={initBonus} onChange={handleNumberChange(setInitBonus)} placeholder="e.g. 2" className="w-full bg-stone-950 border border-stone-800 rounded-xl p-3 text-sm text-center text-white font-mono" />
           </div>
           <div>
             <label className="text-[10px] uppercase font-bold text-stone-400 font-mono block mb-1">Movement Speed</label>
@@ -215,7 +222,6 @@ export default function CreatorFactory() {
           </div>
         </div>
 
-        {/* SECTION 3: ABILITY SCORE BLOCKS */}
         <div>
           <label className="text-[10px] uppercase font-bold text-stone-400 font-mono block mb-2 tracking-wider">Ability Score Allocations</label>
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
@@ -225,7 +231,13 @@ export default function CreatorFactory() {
             ].map(([lbl, val, setFn]: any) => (
               <div key={lbl} className="bg-stone-950 border border-stone-800 p-2.5 rounded-xl text-center relative">
                 <span className="text-[10px] font-mono font-bold text-stone-500 block mb-0.5">{lbl}</span>
-                <input type="number" min={0} value={val} onChange={e => setFn(parseInt(e.target.value) || 0)} className="w-full bg-stone-900 border border-stone-800 rounded-lg py-1.5 text-center text-sm font-mono font-bold text-amber-400 outline-none" />
+                <input
+                  type="number"
+                  value={val}
+                  onChange={handleNumberChange(setFn)}
+                  placeholder="10"
+                  className="w-full bg-stone-900 border border-stone-800 rounded-lg py-1.5 text-center text-sm font-mono font-bold text-amber-400 outline-none"
+                />
                 <span className="text-[11px] font-mono block mt-1 font-bold text-stone-400 bg-stone-900/60 rounded py-0.5 border border-stone-800/40">
                   {getModifierValueString(val)}
                 </span>
@@ -234,7 +246,6 @@ export default function CreatorFactory() {
           </div>
         </div>
 
-        {/* SECTION 4: DEFENSES & SENSES */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="text-[10px] uppercase font-bold text-stone-400 font-mono block mb-1">Saving Throws</label>
@@ -262,7 +273,6 @@ export default function CreatorFactory() {
           </div>
         </div>
 
-        {/* SECTION 5: TEXT DATA BLOCKS */}
         <div className="space-y-4">
           <div>
             <label className="text-[10px] uppercase font-bold text-stone-400 font-mono block mb-1">Special Traits & Passive Abilities</label>
@@ -274,7 +284,6 @@ export default function CreatorFactory() {
           </div>
         </div>
 
-        {/* SECTION 6: PORTRAIT IMAGE */}
         <div>
           <label className="text-[10px] uppercase font-bold text-stone-400 font-mono block mb-1.5">Creature Portrait Graphic File</label>
           <div className="flex gap-3 items-center">
@@ -299,7 +308,6 @@ export default function CreatorFactory() {
           )}
         </div>
 
-        {/* SUBMIT TRIGGERS */}
         <div className="flex gap-3 pt-2 border-t border-stone-800/60">
           {editingId && (
             <button type="button" onClick={() => router.push('/encounter-setup')} className="flex-1 bg-stone-950 hover:bg-stone-800 text-stone-400 border border-stone-800 py-3.5 rounded-xl text-xs uppercase font-bold transition-colors">

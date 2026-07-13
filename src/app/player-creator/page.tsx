@@ -10,16 +10,15 @@ export default function PlayerCreator() {
 
   const [name, setName] = useState('');
   const [characterClass, setCharacterClass] = useState('');
-  const [hpMax, setHpMax] = useState<number>(10);
-  const [ac, setAc] = useState<number>(10);
-  const [initiativeBonus, setInitiativeBonus] = useState<number>(0);
+  const [hpMax, setHpMax] = useState<number | ''>('');
+  const [ac, setAc] = useState<number | ''>('');
+  const [initiativeBonus, setInitiativeBonus] = useState<number | ''>('');
   const [imageUrl, setImageUrl] = useState('');
   
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // 🔄 Check if loading an existing profile for modification/level-up
   useEffect(() => {
     const target = localStorage.getItem('edit_player_target');
     if (target) {
@@ -28,9 +27,9 @@ export default function PlayerCreator() {
         setEditingPlayerId(player.id);
         setName(player.name || '');
         setCharacterClass(player.character_class || '');
-        setHpMax(player.hp_max ?? 10);
-        setAc(player.ac ?? 10);
-        setInitiativeBonus(player.initiative_bonus ?? 0);
+        setHpMax(player.hp_max ?? '');
+        setAc(player.ac ?? '');
+        setInitiativeBonus(player.initiative_bonus ?? '');
         setImageUrl(player.image_url || '');
       } catch (err) {
         console.error('Failed to parse staging player update payload:', err);
@@ -38,7 +37,17 @@ export default function PlayerCreator() {
     }
   }, []);
 
-  // 📷 Handle File Upload to Supabase Storage
+  // Field simply reflects whatever is typed, or stays empty — no default value ever gets forced back in.
+  const handleNumberChange = (setter: (v: number | '') => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    if (val === '') {
+      setter('');
+      return;
+    }
+    const parsed = parseInt(val, 10);
+    if (!isNaN(parsed)) setter(parsed);
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     
@@ -87,15 +96,14 @@ export default function PlayerCreator() {
     const payload = {
       name: name.trim(),
       character_class: characterClass.trim(),
-      hp_max: Number(hpMax),
-      ac: Number(ac),
-      initiative_bonus: Number(initiativeBonus),
+      hp_max: Number(hpMax) || 1,
+      ac: Number(ac) || 0,
+      initiative_bonus: Number(initiativeBonus) || 0,
       image_url: imageUrl.trim() || null,
     };
 
     try {
       if (editingPlayerId) {
-        // 🔄 Run an update operation on the existing database row
         const { error } = await supabase
           .schema('dnd')
           .from('players')
@@ -106,7 +114,6 @@ export default function PlayerCreator() {
         localStorage.removeItem('edit_player_target');
         setMessage({ type: 'success', text: `Character "${name}" evolved successfully!` });
       } else {
-        // ➕ Run an insert operation for a brand new sheet
         const { error } = await supabase
           .schema('dnd')
           .from('players')
@@ -116,7 +123,6 @@ export default function PlayerCreator() {
         setMessage({ type: 'success', text: `Character "${name}" forged successfully!` });
       }
 
-      // Route immediately back to staging deck to review the adjustments
       setTimeout(() => {
         router.push('/encounter-setup');
       }, 800);
@@ -138,7 +144,6 @@ export default function PlayerCreator() {
     <main className="min-h-screen bg-stone-950 text-stone-100 p-6 md:p-8 font-sans select-none selection:bg-amber-500/20">
       <div className="max-w-xl mx-auto space-y-6">
         
-        {/* HEADER TRACK */}
         <div className="border-b border-stone-900 pb-4 flex justify-between items-center">
           <div>
             <h1 className="text-xl font-black font-mono uppercase tracking-widest text-amber-500">
@@ -157,7 +162,6 @@ export default function PlayerCreator() {
           </button>
         </div>
 
-        {/* FEEDBACK BANNER */}
         {message && (
           <div className={`p-3 rounded-xl font-mono text-xs uppercase border ${
             message.type === 'success' 
@@ -168,10 +172,8 @@ export default function PlayerCreator() {
           </div>
         )}
 
-        {/* DATA UTILITY CONFIG FORM */}
         <form onSubmit={handleSubmit} className="bg-stone-900/40 border border-stone-900 p-6 rounded-2xl space-y-5 shadow-xl">
           
-          {/* NAME & CLASS SECTION */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-[10px] font-mono uppercase tracking-wider text-stone-400 block">Character Name</label>
@@ -197,14 +199,14 @@ export default function PlayerCreator() {
             </div>
           </div>
 
-          {/* ATTRIBUTE METRIC ARRAY */}
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-1">
               <label className="text-[10px] font-mono uppercase tracking-wider text-stone-400 block">Max HP</label>
               <input
                 type="number"
                 value={hpMax}
-                onChange={(e) => setHpMax(Math.max(1, Number(e.target.value)))}
+                onChange={handleNumberChange(setHpMax)}
+                placeholder="e.g. 10"
                 className="w-full bg-stone-950 border border-stone-850 focus:border-amber-500 rounded-xl p-2.5 text-sm text-stone-200 font-mono outline-none transition"
                 required
               />
@@ -214,7 +216,8 @@ export default function PlayerCreator() {
               <input
                 type="number"
                 value={ac}
-                onChange={(e) => setAc(Math.max(0, Number(e.target.value)))}
+                onChange={handleNumberChange(setAc)}
+                placeholder="e.g. 10"
                 className="w-full bg-stone-950 border border-stone-850 focus:border-amber-500 rounded-xl p-2.5 text-sm text-stone-200 font-mono outline-none transition"
                 required
               />
@@ -224,14 +227,14 @@ export default function PlayerCreator() {
               <input
                 type="number"
                 value={initiativeBonus}
-                onChange={(e) => setInitiativeBonus(Number(e.target.value))}
+                onChange={handleNumberChange(setInitiativeBonus)}
+                placeholder="e.g. 2"
                 className="w-full bg-stone-950 border border-stone-850 focus:border-amber-500 rounded-xl p-2.5 text-sm text-stone-200 font-mono outline-none transition"
                 required
               />
             </div>
           </div>
 
-          {/* STORAGE ASSET UPLOAD INJECTION PANEL */}
           <div className="space-y-2 border-t border-stone-900 pt-4">
             <label className="text-[10px] font-mono uppercase tracking-wider text-stone-400 block">Token Image Asset</label>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
@@ -254,7 +257,6 @@ export default function PlayerCreator() {
             </div>
           </div>
 
-          {/* EXECUTIVE TRANSACTION BUTTON */}
           <div className="pt-2">
             <button
               type="submit"
